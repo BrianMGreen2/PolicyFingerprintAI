@@ -81,7 +81,7 @@ The documentation, architectural concepts, and FAQ for **PolicyFingerprint™** 
 * The underlying **Policy State Hash (PSH) algorithms**, **Cipher Agent Flow logic**, and proprietary implementation code remain the exclusive intellectual property of **Brian M. Green**.
 * No license is granted herein for the commercial use or reproduction of the unpublished source code or trade secrets associated with the PolicyFingerprint™ standard.
 
-© 2025-2026 Brian M. Green. All rights reserved.
+© 2025-2026 Brian M. Green and Health-Vision.AI, LLC. All rights reserved.
 
 ---
 
