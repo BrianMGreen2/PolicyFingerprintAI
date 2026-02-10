@@ -124,6 +124,15 @@ We are currently in the **"Specification & Feedback"** phase. While the core cod
 * **Integration Ideas:** Propose how the PSH layer should interact with other frameworks like LangChain, LlamaIndex, or AutoGPT.
 * **Star the Repo:** If you believe "Identity for Autonomy" is a critical standard, starring this repo helps us gauge developer interest and prioritize the public alpha release.
 
+### 🏘️ Join the Community
+Interested in the private alpha or staying updated on the PolicyFingerprint™ standard? We invite you to join the Agentic Village.
+
+Waitlist & Updates: Join at the Free Village Green Membership level.
+
+Responsible AI Discourse: Participate in an online community dedicated to building ethical, secure, and verifiable agentic AI.
+
+Get Notified: Be the first to know when the PSH engine moves into public beta or when new RFCs are released.
+
 #### **A Note on Code Contributions:**
 
 At this stage, we are not accepting Pull Requests for the core PSH engine or the Veto Layer. However, we are looking for **Community Architects** to help draft the formal RFC (Request for Comments) for the PolicyFingerprint™ standard.
