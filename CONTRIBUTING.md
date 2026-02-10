@@ -33,9 +33,18 @@ As a project focused on "Legitimacy and Identity," we expect all contributors to
 ---
 
 ## 💎 Become a Community Architect
-If you are a security researcher or governance lead and wish to get more deeply involved in the **PolicyFingerprint Standard**, please reach out via [Insert Link/Email/LinkedIn] or open an issue with the tag `[Architect]`.
+If you are a security researcher or governance lead and wish to get more deeply involved in the **PolicyFingerprint Standard**, please reach out via email brian@health-vision.ai or open an issue with the tag `[Architect]`. You can also join the community of responsible agentic AI builders (Village Green free membership level) at https://agenticvillage.net/
 
 ---
+
+## 📚 Documentation
+For a deep dive into our technical standards and terminology, visit our [Project Wiki](../../wiki).
+
+* **[Glossary of Terms](../../wiki/Glossary)** – Defining Identity Debt, PSH, and more.
+* **[Technical FAQ](../../wiki/FAQ)** – Why deterministic governance matters.
+
+---
+
 
 ## ⚖️ Intellectual Property
 By contributing to this repository, you agree that your contributions (in the form of issues, discussions, or documentation PRs) may be incorporated into the PolicyFingerprint™ standard and documentation under the **CC BY-ND 4.0** license.
