@@ -13,6 +13,13 @@ Modern AI agents (OpenClaw, Moltbot, etc.) operate as high-privilege non-human i
 
 **PolicyFingerprint™** fills this gap by creating an immutable, verifiable "DNA fingerprint" for every AI decision, ensuring that agents cannot "hallucinate" their authority or bypass Zero Trust perimeters.
 
+## Project "Manifesto"
+Identity for Autonomy: We shift AI security from "trusting" an agent's reasoning to deterministically verifying its identity. Every agent and skill must carry a unique cryptographic birth certificate.
+
+The Veto over the Guardrail: Traditional guardrails are soft and probabilistic. We implement a Policy State Hash (PSH) layer that provides a hard, kernel-level veto—if the fingerprint doesn't match the policy, the command simply cannot execute.
+
+Cryptographic Provenance: We eliminate "shadow governance" by creating an immutable record of the exact policy bundle that governed every AI decision. Using Merkle Trees, we offer selective disclosure so you can prove compliance without exposing proprietary secrets.
+
 ## 🏗️ The Layered Integrity Model
 
 We use a three-layer architecture to balance privacy, granularity, and public trust:
