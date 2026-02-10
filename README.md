@@ -129,6 +129,13 @@ We are currently in the **"Specification & Feedback"** phase. While the core cod
 At this stage, we are not accepting Pull Requests for the core PSH engine or the Veto Layer. However, we are looking for **Community Architects** to help draft the formal RFC (Request for Comments) for the PolicyFingerprint™ standard.
 
 ---
+## 📚 Documentation
+For a deep dive into our technical standards and terminology, visit our [Project Wiki](../../wiki).
+
+* **[Glossary of Terms](../../wiki/Glossary)** – Defining Identity Debt, PSH, and more.
+* **[Technical FAQ](../../wiki/FAQ)** – Why deterministic governance matters.
+
+---
 
 ## ⚖️ Intellectual Property & Licensing
 
