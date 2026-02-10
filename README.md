@@ -40,6 +40,14 @@ PSH is the cryptographic fingerprint of the exact policy bundle used for a speci
 
 Guardrails are usually *probabilistic* (trying to convince the LLM to be good). PolicyFingerprint is *deterministic* (making it physically impossible for the agent to be bad). If an agent's runtime hash doesn't match the authorized PSH, the **Deterministic Veto** layer kills the execution at the kernel level.
 
+### How does PSH detect "Policy Drift"?
+
+Because the PSH is a SHA-256 digest of the entire canonicalized policy JSON, any "drift"—intentional or otherwise—is instantly detectable. If an agent's runtime hash doesn't match the authorized PSH, the Deterministic Veto layer kills the execution.
+
+### Why canonicalization?
+
+To ensure the same policy always produces the same hash, we use Deterministic JSON Canonicalization (RFC 8785). This prevents whitespace or key-ordering differences from triggering false "drift" alerts.
+
 ### 🛡️ PolicyFingerprint™ vs. Traditional Blockchain
 
 A common misconception is that a public ledger alone is sufficient for AI accountability. While blockchain is an excellent "notary," PolicyFingerprint™ acts as the "governance micro-ledger" that provides the necessary context for the audit.
