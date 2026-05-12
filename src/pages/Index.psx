@@ -1,0 +1,8 @@
+import PolicyDemo from "@/components/PolicyDemo";
+import VetoGateway from "@/components/VetoGateway";   // ← add
+import TrustMetrics from "@/components/TrustMetrics";
+
+// ...inside the JSX:
+<PolicyDemo />
+<VetoGateway />   {/* ← add */}
+<TrustMetrics />
