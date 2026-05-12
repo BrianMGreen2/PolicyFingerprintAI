@@ -5,6 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { ShieldCheck, ShieldX, Zap, Lock, ScrollText, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import canonicalize from "canonicalize";
+import { externalSupabase } from "@/lib/externalSupabase";
+
+// ─── constants ───────────────────────────────────────────────────────────────
 
 const authorizedPolicy = `{
   "schema_version": "1.0",
@@ -25,7 +28,14 @@ const sampleToolCall = `{
   }
 }`;
 
-type Decision = { status: "allow" | "veto"; runtimeHash: string; authorizedHash: string; reason: string };
+// ─── types ────────────────────────────────────────────────────────────────────
+
+type Decision = {
+  status: "allow" | "veto";
+  runtimeHash: string;
+  authorizedHash: string;
+  reason: string;
+};
 
 type AuditEntry = {
   id: string;
@@ -37,13 +47,50 @@ type AuditEntry = {
   reason: string;
 };
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
 async function sha256Canonical(jsonText: string): Promise<string> {
   const parsed = JSON.parse(jsonText);
   const canonical = canonicalize(parsed);
   if (!canonical) throw new Error("Canonicalization failed");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonical),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
+
+/**
+ * Persist one audit entry to Supabase.
+ * Maps camelCase AuditEntry fields → snake_case column names.
+ * Also stores the full tool call payload for forensic use.
+ */
+async function insertAuditEntry(
+  entry: AuditEntry,
+  toolCallPayload: object,
+): Promise<void> {
+  const { error } = await externalSupabase.from("veto_audit_log").insert({
+    id: entry.id,
+    timestamp: entry.timestamp,
+    tool: entry.tool,
+    status: entry.status,
+    authorized_hash: entry.authorizedHash,
+    runtime_hash: entry.runtimeHash,
+    reason: entry.reason,
+    tool_call_payload: toolCallPayload,
+    // agent_id and session_id can be added here later when you have auth
+  });
+
+  if (error) {
+    // Non-blocking — log to console but don't break the UI
+    console.error("Supabase insert failed:", error.message);
+    toast.error(`Audit log sync failed: ${error.message}`);
+  }
+}
+
+// ─── component ───────────────────────────────────────────────────────────────
 
 const VetoGateway = () => {
   const [authorized, setAuthorized] = useState(authorizedPolicy);
@@ -52,22 +99,27 @@ const VetoGateway = () => {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [checking, setChecking] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   const intercept = async () => {
     setChecking(true);
     setDecision(null);
     try {
       const parsedCall = JSON.parse(toolCall);
+
       const [authorizedHash, runtimeHash] = await Promise.all([
         sha256Canonical(authorized),
         sha256Canonical(runtime),
       ]);
+
       const match = authorizedHash === runtimeHash;
       const reason = match
         ? "Runtime PSH matches an authorized policy. Tool call permitted."
         : "Runtime PSH does NOT match any authorized policy. Shadow policy detected — call blocked.";
       const status: "allow" | "veto" = match ? "allow" : "veto";
+
       setDecision({ status, runtimeHash, authorizedHash, reason });
+
       const entry: AuditEntry = {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
@@ -77,19 +129,32 @@ const VetoGateway = () => {
         runtimeHash,
         reason,
       };
+
+      // 1. Update local state immediately (instant UI feedback)
       setAuditLog((prev) => [entry, ...prev].slice(0, 100));
-      match ? toast.success("Tool call allowed") : toast.error("Tool call vetoed");
+
+      // 2. Persist to Supabase in the background
+      setSyncing(true);
+      insertAuditEntry(entry, parsedCall).finally(() => setSyncing(false));
+
+      match
+        ? toast.success("Tool call allowed")
+        : toast.error("Tool call vetoed");
     } catch (err) {
-      toast.error(`Gateway error: ${err instanceof Error ? err.message : "invalid JSON"}`);
+      toast.error(
+        `Gateway error: ${err instanceof Error ? err.message : "invalid JSON"}`,
+      );
     } finally {
       setChecking(false);
     }
   };
 
   const tamper = () => {
-    setRuntime(runtime.includes('"no_pii"')
-      ? runtime.replace('"no_pii"', '"allow_pii"')
-      : authorizedPolicy.replace('"no_pii"', '"allow_pii"'));
+    setRuntime(
+      runtime.includes('"no_pii"')
+        ? runtime.replace('"no_pii"', '"allow_pii"')
+        : authorizedPolicy.replace('"no_pii"', '"allow_pii"'),
+    );
     setDecision(null);
   };
 
@@ -99,7 +164,9 @@ const VetoGateway = () => {
   };
 
   const exportLog = () => {
-    const blob = new Blob([JSON.stringify(auditLog, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(auditLog, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -107,6 +174,8 @@ const VetoGateway = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  // ─── render ────────────────────────────────────────────────────────────────
 
   return (
     <section className="py-24">
@@ -117,11 +186,13 @@ const VetoGateway = () => {
               The <span className="text-gradient-teal">Veto Gateway</span>
             </h2>
             <p className="text-xl text-muted-foreground">
-              Every tool call is intercepted. Runtime PSH must match an authorized policy — or it's blocked.
+              Every tool call is intercepted. Runtime PSH must match an
+              authorized policy — or it's blocked.
             </p>
           </div>
 
           <Card className="p-8 bg-card border-border">
+            {/* Policy inputs */}
             <div className="grid md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium mb-3 flex items-center gap-2">
@@ -130,7 +201,10 @@ const VetoGateway = () => {
                 </label>
                 <Textarea
                   value={authorized}
-                  onChange={(e) => { setAuthorized(e.target.value); setDecision(null); }}
+                  onChange={(e) => {
+                    setAuthorized(e.target.value);
+                    setDecision(null);
+                  }}
                   className="font-mono text-xs min-h-[180px] bg-background border-border"
                 />
               </div>
@@ -141,21 +215,31 @@ const VetoGateway = () => {
                 </label>
                 <Textarea
                   value={runtime}
-                  onChange={(e) => { setRuntime(e.target.value); setDecision(null); }}
+                  onChange={(e) => {
+                    setRuntime(e.target.value);
+                    setDecision(null);
+                  }}
                   className="font-mono text-xs min-h-[180px] bg-background border-border"
                 />
               </div>
             </div>
 
+            {/* Tool call input */}
             <div className="mt-6">
-              <label className="block text-sm font-medium mb-3">Intercepted Tool Call</label>
+              <label className="block text-sm font-medium mb-3">
+                Intercepted Tool Call
+              </label>
               <Textarea
                 value={toolCall}
-                onChange={(e) => { setToolCall(e.target.value); setDecision(null); }}
+                onChange={(e) => {
+                  setToolCall(e.target.value);
+                  setDecision(null);
+                }}
                 className="font-mono text-xs min-h-[120px] bg-background border-border"
               />
             </div>
 
+            {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-3 mt-6">
               <Button
                 onClick={intercept}
@@ -180,6 +264,7 @@ const VetoGateway = () => {
               </Button>
             </div>
 
+            {/* Decision result */}
             {decision && (
               <div className="mt-8 animate-in slide-in-from-bottom-2 duration-500">
                 <div
@@ -199,28 +284,55 @@ const VetoGateway = () => {
                       <div className="text-xs uppercase tracking-wider text-muted-foreground">
                         Deterministic Veto
                       </div>
-                      <div className={`text-2xl font-bold ${
-                        decision.status === "allow" ? "text-success" : "text-destructive"
-                      }`}>
+                      <div
+                        className={`text-2xl font-bold ${
+                          decision.status === "allow"
+                            ? "text-success"
+                            : "text-destructive"
+                        }`}
+                      >
                         {decision.status === "allow" ? "ALLOWED" : "BLOCKED"}
                       </div>
                     </div>
+                    {/* Supabase sync indicator */}
+                    {syncing && (
+                      <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+                        Syncing to DB…
+                      </div>
+                    )}
+                    {!syncing && auditLog.length > 0 && (
+                      <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="h-2 w-2 rounded-full bg-success" />
+                        Saved to Supabase
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm text-foreground mb-4">{decision.reason}</p>
+
+                  <p className="text-sm text-foreground mb-4">
+                    {decision.reason}
+                  </p>
+
                   <div className="space-y-2 text-xs">
                     <div>
-                      <div className="text-muted-foreground mb-1">Authorized PSH</div>
+                      <div className="text-muted-foreground mb-1">
+                        Authorized PSH
+                      </div>
                       <div className="hash-font p-2 bg-background border border-border rounded break-all text-secondary">
                         {decision.authorizedHash}
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground mb-1">Runtime PSH</div>
-                      <div className={`hash-font p-2 bg-background border rounded break-all ${
-                        decision.status === "allow"
-                          ? "border-success/30 text-success"
-                          : "border-destructive/30 text-destructive"
-                      }`}>
+                      <div className="text-muted-foreground mb-1">
+                        Runtime PSH
+                      </div>
+                      <div
+                        className={`hash-font p-2 bg-background border rounded break-all ${
+                          decision.status === "allow"
+                            ? "border-success/30 text-success"
+                            : "border-destructive/30 text-destructive"
+                        }`}
+                      >
                         {decision.runtimeHash}
                       </div>
                     </div>
@@ -229,21 +341,33 @@ const VetoGateway = () => {
               </div>
             )}
 
+            {/* Audit log */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <ScrollText className="h-5 w-5 text-secondary" />
                   <h3 className="text-lg font-semibold">Audit Log</h3>
                   <span className="text-xs text-muted-foreground">
-                    ({auditLog.length} {auditLog.length === 1 ? "entry" : "entries"})
+                    ({auditLog.length}{" "}
+                    {auditLog.length === 1 ? "entry" : "entries"})
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={exportLog} variant="outline" size="sm" disabled={auditLog.length === 0}>
+                  <Button
+                    onClick={exportLog}
+                    variant="outline"
+                    size="sm"
+                    disabled={auditLog.length === 0}
+                  >
                     <Download className="h-4 w-4 mr-1" />
                     Export JSON
                   </Button>
-                  <Button onClick={clearLog} variant="outline" size="sm" disabled={auditLog.length === 0}>
+                  <Button
+                    onClick={clearLog}
+                    variant="outline"
+                    size="sm"
+                    disabled={auditLog.length === 0}
+                  >
                     <Trash2 className="h-4 w-4 mr-1" />
                     Clear
                   </Button>
@@ -258,7 +382,10 @@ const VetoGateway = () => {
                 <div className="border border-border rounded-lg overflow-hidden">
                   <div className="max-h-96 overflow-y-auto divide-y divide-border">
                     {auditLog.map((entry) => (
-                      <div key={entry.id} className="p-4 bg-background/50 hover:bg-background transition-colors">
+                      <div
+                        key={entry.id}
+                        className="p-4 bg-background/50 hover:bg-background transition-colors"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
                             {entry.status === "allow" ? (
@@ -268,28 +395,40 @@ const VetoGateway = () => {
                             )}
                             <span
                               className={`text-xs font-bold uppercase tracking-wider ${
-                                entry.status === "allow" ? "text-success" : "text-destructive"
+                                entry.status === "allow"
+                                  ? "text-success"
+                                  : "text-destructive"
                               }`}
                             >
                               {entry.status === "allow" ? "ALLOWED" : "BLOCKED"}
                             </span>
-                            <span className="text-xs text-muted-foreground">·</span>
-                            <span className="text-xs font-mono text-foreground">{entry.tool}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ·
+                            </span>
+                            <span className="text-xs font-mono text-foreground">
+                              {entry.tool}
+                            </span>
                           </div>
                           <time className="text-xs text-muted-foreground hash-font">
                             {new Date(entry.timestamp).toLocaleString()}
                           </time>
                         </div>
-                        <p className="text-xs text-muted-foreground mb-2">{entry.reason}</p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          {entry.reason}
+                        </p>
                         <div className="grid sm:grid-cols-2 gap-2 text-[10px]">
                           <div>
-                            <div className="text-muted-foreground mb-0.5">Authorized PSH</div>
+                            <div className="text-muted-foreground mb-0.5">
+                              Authorized PSH
+                            </div>
                             <div className="hash-font p-1.5 bg-background border border-border rounded break-all text-secondary">
                               {entry.authorizedHash.slice(0, 32)}…
                             </div>
                           </div>
                           <div>
-                            <div className="text-muted-foreground mb-0.5">Runtime PSH</div>
+                            <div className="text-muted-foreground mb-0.5">
+                              Runtime PSH
+                            </div>
                             <div
                               className={`hash-font p-1.5 bg-background border rounded break-all ${
                                 entry.status === "allow"
